@@ -1,5 +1,5 @@
 {
-  description = "nk rust env";
+  description = "A secure, streamlined Rust development environment";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -16,54 +16,58 @@
       nixpkgs,
       flake-utils,
       rust-overlay,
-      ...
     }:
     flake-utils.lib.eachDefaultSystem (
       system:
       let
         overlays = [ (import rust-overlay) ];
-        pkgs = import nixpkgs {
-          inherit system overlays;
-        };
+        pkgs = import nixpkgs { inherit system overlays; };
 
-        # Define the exact toolchain you want to use.
-        # You can change `stable` to `nightly` or a specific version like `"1.75.0"`.
+        # Clean, stable toolchain with essential LSP components
         rustToolchain = pkgs.rust-bin.stable.latest.default.override {
           extensions = [
             "rust-src"
             "rust-analyzer"
             "clippy"
+            "rustfmt"
           ];
-          # Uncomment and add targets if you are cross-compiling or building for WebAssembly
-          # targets = [ "wasm32-unknown-unknown" ];
         };
+
       in
       {
         devShells.default = pkgs.mkShell {
-          # nativeBuildInputs is usually for build-time tools (pkg-config, compilers)
           nativeBuildInputs = with pkgs; [
             rustToolchain
             pkg-config
+
+            # ── Security & Auditing ──────────────────────────────────────────
+            cargo-audit # Checks dependency tree for known vulnerabilities
+            cargo-deny # Bans malicious crates and unapproved licenses
+
+            # ── Workflow Essentials ──────────────────────────────────────────
+            cargo-watch # Automates 'cargo check' on file save
+            just # Simple command runner
           ];
 
-          # buildInputs is for runtime dependencies (C libraries your Rust code links against)
           buildInputs = with pkgs; [
             openssl
-            # Add other common C dependencies your project might need here:
-            # sqlite
-            # wayland
-            # libxkbcommon
           ];
 
-          # Environment variables required by the environment
-          # RUST_SRC_PATH is strictly required for rust-analyzer to work cleanly on NixOS
+          # ── Strict Environment Variables ───────────────────────────────────
           RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
+          RUST_BACKTRACE = "1";
+
+          # Force OpenSSL to use the system library to prevent build failures
+          PKG_CONFIG_PATH = "${pkgs.openssl.dev}/lib/pkgconfig";
+          OPENSSL_NO_VENDOR = "1";
 
           shellHook = ''
-            echo "🦀 Welcome to your Rust development environment!"
-            cargo --version
+            echo "🛡️ Secure Rust environment loaded."
+            echo "   Run 'cargo audit' to check dependencies."
           '';
         };
+
+        formatter = pkgs.nixpkgs-fmt;
       }
     );
 }
